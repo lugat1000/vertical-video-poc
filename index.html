@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Vertical Video PoC</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;600;700&family=DM+Mono:wght@400;500&display=swap');
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { --bg: #0a0a0a; --accent: #00e5ff; --text: #fff; --muted: rgba(255,255,255,0.45); }
+    html, body { height: 100%; width: 100%; background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; overflow: hidden; user-select: none; }
+    #bg-glow { position: fixed; inset: 0; pointer-events: none; z-index: 0; background: radial-gradient(ellipse 60% 40% at 50% 50%, rgba(0,229,255,0.06) 0%, transparent 70%); transition: background 0.8s; }
+    #app { display: flex; align-items: center; justify-content: center; height: 100vh; width: 100vw; position: relative; }
+    #player-stage { position: relative; display: flex; align-items: center; justify-content: center; z-index: 1; }
+
+    /* ── Portrait crop wrapper (9:16) ── */
+    #crop-wrapper {
+      position: relative;
+      width: min(100vw, 380px);
+      aspect-ratio: 9 / 16;
+      max-height: 90vh;
+      overflow: hidden;
+      border-radius: 18px;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.08), 0 32px 80px rgba(0,0,0,0.8), 0 0 60px rgba(0,229,255,0.12);
+      background: #000;
+    }
+
+    /* ── Active + preload player slots ── */
+    .player-slot {
+      position: absolute;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%) scale(3.16);
+      transform-origin: center center;
+      transition: opacity 0.3s ease;
+    }
+    /* Preload slot ist unsichtbar aber aktiv */
+    .player-slot.preload {
+      opacity: 0;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .player-slot.active { opacity: 1; z-index: 1; }
+
+    /* Bitmovin default UI verstecken */
+    .player-slot .bmpui-ui-uicontainer { display: none !important; }
+
+    #overlay { position: absolute; inset: 0; border-radius: 18px; background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.3) 35%, transparent 60%, rgba(0,0,0,0.2) 100%); pointer-events: none; z-index: 10; }
+    #video-info { position: absolute; bottom: 0; left: 0; right: 0; padding: 28px 20px 20px; z-index: 11; pointer-events: none; }
+    .video-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; text-shadow: 0 1px 8px rgba(0,0,0,0.8); }
+    .video-desc  { font-size: 12px; color: var(--muted); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .video-counter { position: absolute; top: 14px; right: 16px; font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); background: rgba(0,0,0,0.4); backdrop-filter: blur(8px); padding: 4px 10px; border-radius: 20px; z-index: 11; pointer-events: none; }
+
+    #nav { position: absolute; right: -56px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 12px; z-index: 20; }
+    .nav-btn { width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.08); backdrop-filter: blur(12px); color: #fff; font-size: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; }
+    .nav-btn:hover { background: rgba(0,229,255,0.2); border-color: var(--accent); }
+    .nav-btn:disabled { opacity: 0.25; cursor: not-allowed; }
+    #progress-dots { position: absolute; left: -40px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 8px; z-index: 20; }
+    .dot { width: 4px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.25); transition: all 0.3s; cursor: pointer; }
+    .dot.active { height: 24px; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+
+    #loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; z-index: 50; background: rgba(0,0,0,0.7); border-radius: 18px; transition: opacity 0.3s; }
+    #loading.hidden { opacity: 0; pointer-events: none; }
+    .spinner { width: 36px; height: 36px; border: 2px solid rgba(255,255,255,0.1); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { font-size: 12px; color: var(--muted); font-family: 'DM Mono', monospace; }
+
+    /* Preload progress indicator */
+    #preload-indicator { position: absolute; top: 14px; left: 16px; z-index: 11; display: none; }
+    #preload-indicator.visible { display: block; }
+    .preload-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); opacity: 0.5; animation: pulse 1.2s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity: 0.3; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.1); } }
+
+    #error-banner { display: none; position: fixed; top: 16px; left: 50%; transform: translateX(-50%); background: rgba(255,61,107,0.15); border: 1px solid rgba(255,61,107,0.4); color: #ff3d6b; font-size: 12px; padding: 10px 20px; border-radius: 8px; z-index: 100; max-width: 90vw; }
+    #diag-panel { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.92); border-top: 1px solid rgba(0,229,255,0.2); padding: 12px 16px 12px 16px; z-index: 200; max-height: 40vh; overflow-y: auto; }
+    #diag-log { font-family: 'DM Mono', monospace; font-size: 11px; color: #aaa; line-height: 1.8; }
+    #diag-close { position: absolute; top: 8px; right: 12px; color: #fff; font-size: 16px; cursor: pointer; background: none; border: none; }
+    @media (max-width: 560px) { #nav { right: 12px; } #progress-dots { display: none; } }
+  </style>
+</head>
+<body>
+<div id="bg-glow"></div>
+<div id="app">
+  <div id="player-stage">
+    <div id="progress-dots"></div>
+    <div id="crop-wrapper">
+      <!-- Slot A: aktiver Player -->
+      <div id="slot-a" class="player-slot active">
+        <div id="player-a"></div>
+      </div>
+      <!-- Slot B: Preload-Player (unsichtbar) -->
+      <div id="slot-b" class="player-slot preload">
+        <div id="player-b"></div>
+      </div>
+
+      <div id="overlay"></div>
+      <div class="video-counter" id="counter">– / –</div>
+      <div id="preload-indicator"><div class="preload-dot"></div></div>
+      <div id="video-info">
+        <div class="video-title" id="video-title">Lade...</div>
+        <div class="video-desc"  id="video-desc"></div>
+      </div>
+      <div id="loading">
+        <div class="spinner"></div>
+        <div class="loading-text" id="loading-text">Verbinde...</div>
+      </div>
+    </div>
+    <div id="nav">
+      <button class="nav-btn" id="btn-prev">↑</button>
+      <button class="nav-btn" id="btn-next">↓</button>
+    </div>
+  </div>
+</div>
+<div id="error-banner"></div>
+<div id="diag-panel">
+  <button id="diag-close" onclick="document.getElementById('diag-panel').style.display='none'">×</button>
+  <div id="diag-log"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// KONFIGURATION – hier deine Werte eintragen
+// ═══════════════════════════════════════════════════════════
+const API_URL = 'DEINE_APPS_SCRIPT_WEB_APP_URL';
+const USER_ID = ''; // z.B. 'lukas@chmedia.ch' oder leer
+
+// ═══════════════════════════════════════════════════════════
+// Diagnostics
+// ═══════════════════════════════════════════════════════════
+const diag = {
+  log(msg, isErr) {
+    const ts   = new Date().toISOString().substr(11,8);
+    const line = document.createElement('div');
+    line.textContent = `${ts} ${isErr ? '❌' : '✓'} ${msg}`;
+    if (isErr) line.style.color = '#ff3d6b';
+    else if (msg.startsWith('⚡')) line.style.color = '#00e5ff';
+    document.getElementById('diag-log').appendChild(line);
+    document.getElementById('diag-panel').scrollTop = 99999;
+    console[isErr ? 'error' : 'log']('[VP]', msg);
+  },
+  err(msg)  { this.log(msg, true); showError(msg); },
+  show()    { document.getElementById('diag-panel').style.display = 'block'; },
+};
+
+// ═══════════════════════════════════════════════════════════
+// State
+// ═══════════════════════════════════════════════════════════
+let videos        = [];
+let currentIndex  = 0;
+let isTransitioning = false;
+
+// Zwei Player-Instanzen: active + preload
+// activeSlot: 'a' oder 'b' — wechselt bei jedem Video
+const players = { a: null, b: null };
+let activeSlot   = 'a';   // aktuell sichtbarer Slot
+let preloadIndex = -1;    // welcher Video-Index ist preloaded
+
+const elTitle     = document.getElementById('video-title');
+const elDesc      = document.getElementById('video-desc');
+const elCounter   = document.getElementById('counter');
+const elLoading   = document.getElementById('loading');
+const elLoadTxt   = document.getElementById('loading-text');
+const elDots      = document.getElementById('progress-dots');
+const elBtnPrev   = document.getElementById('btn-prev');
+const elBtnNext   = document.getElementById('btn-next');
+const elError     = document.getElementById('error-banner');
+const elBgGlow    = document.getElementById('bg-glow');
+const elPreloadInd = document.getElementById('preload-indicator');
+
+// ═══════════════════════════════════════════════════════════
+// Init — SDK + API parallel starten (Optimierung 1)
+// ═══════════════════════════════════════════════════════════
+async function init() {
+  diag.show();
+  diag.log('App gestartet');
+
+  if (!API_URL || API_URL === 'DEINE_APPS_SCRIPT_WEB_APP_URL') {
+    diag.err('API_URL nicht gesetzt!');
+    hideLoading();
+    return;
+  }
+
+  setLoadingText('Lade...');
+
+  // ⚡ SDK-Download und API-Call starten gleichzeitig
+  diag.log('⚡ SDK + API parallel gestartet');
+  const t0 = Date.now();
+
+  const [_, apiData] = await Promise.all([
+    loadSDK('https://cdn.bitmovin.com/player/web/8/bitmovinplayer.js')
+      .then(() => diag.log(`⚡ SDK fertig (${Date.now()-t0}ms)`))
+      .catch(e => { throw new Error('SDK: ' + e.message); }),
+    fetchAPI()
+      .then(d  => { diag.log(`⚡ API fertig (${Date.now()-t0}ms) – ${d.videos.length} Videos`); return d; })
+      .catch(e => { throw new Error('API: ' + e.message); }),
+  ]).catch(e => { diag.err(e.message); hideLoading(); return null; });
+
+  if (!apiData) return;
+
+  videos = apiData.videos;
+  if (videos.length === 0) { diag.err('Playlist leer'); hideLoading(); return; }
+
+  buildDots();
+  bindNavigation();
+
+  // Beide Player-Instanzen anlegen
+  setLoadingText('Starte Player...');
+  initPlayers(apiData.config.bitmovinLicenseKey);
+}
+
+// ═══════════════════════════════════════════════════════════
+// API fetch
+// ═══════════════════════════════════════════════════════════
+async function fetchAPI() {
+  const url = USER_ID
+    ? `${API_URL}?userId=${encodeURIComponent(USER_ID)}`
+    : API_URL;
+  diag.log('fetch → ' + url.substr(0,60) + '...');
+  const res  = await fetch(url);
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || 'API error');
+  return data;
+}
+
+// ═══════════════════════════════════════════════════════════
+// SDK laden
+// ═══════════════════════════════════════════════════════════
+function loadSDK(url) {
+  return new Promise((resolve, reject) => {
+    if (window.bitmovin && window.bitmovin.player) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src     = url;
+    s.onload  = resolve;
+    s.onerror = () => reject(new Error('Konnte SDK nicht laden: ' + url));
+    document.head.appendChild(s);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// Zwei Player anlegen (Optimierung 2: Preload)
+// ═══════════════════════════════════════════════════════════
+function initPlayers(licenseKey) {
+  diag.log('Initialisiere 2 Player-Instanzen (active + preload)');
+
+  ['a', 'b'].forEach(slot => {
+    try {
+      players[slot] = new bitmovin.player.Player(
+        document.getElementById('player-' + slot),
+        {
+          key: licenseKey,
+          playback: { autoplay: false, muted: true },
+          logs: { level: 'warn' },
+        }
+      );
+    } catch(e) {
+      diag.err(`Player-${slot} Konstruktor: ` + e.message);
+    }
+  });
+
+  // Events nur auf active Player überwachen
+  // (wird bei jedem Slot-Wechsel umgehängt)
+  attachEvents('a');
+
+  diag.log('Lade erstes Video...');
+  loadIntoSlot('a', 0, true);
+}
+
+// ═══════════════════════════════════════════════════════════
+// Video in einen Slot laden
+// ═══════════════════════════════════════════════════════════
+function loadIntoSlot(slot, index, isActive) {
+  const player = players[slot];
+  if (!player || !videos[index]) return Promise.resolve();
+
+  const v    = videos[index];
+  const base = `${v.serviceUrl}/p/${v.partnerId}/sp/${v.partnerId}00/playManifest/entryId/${v.id}`;
+  const ksQ  = v.ks ? `&ks=${encodeURIComponent(v.ks)}` : '';
+
+  if (isActive) {
+    diag.log(`Slot-${slot} (active) → Video ${index+1}: ${v.id}`);
+  } else {
+    diag.log(`Slot-${slot} (preload) → Video ${index+1}: ${v.id}`);
+    elPreloadInd.classList.add('visible');
+  }
+
+  return player.load({
+    title:  v.title,
+    poster: v.thumbnail,
+    dash:   `${base}/format/mpegdash/protocol/https/manifest.mpd?deliveryCode=kalturaDelivery${ksQ}`,
+    hls:    `${base}/format/applehttp/protocol/https/manifest.m3u8?deliveryCode=kalturaDelivery${ksQ}`,
+  })
+  .then(() => {
+    if (isActive) {
+      diag.log(`Slot-${slot} load() OK → play()`);
+      updateUI(index);
+      hideLoading();
+      return player.play();
+    } else {
+      // Preload: starten + sofort pausieren damit Buffer gefüllt wird
+      diag.log(`⚡ Preload Slot-${slot} bereit (Video ${index+1})`);
+      preloadIndex = index;
+      elPreloadInd.classList.remove('visible');
+      return player.play().then(() => player.pause());
+    }
+  })
+  .catch(err => {
+    const msg = err.message || (err.data && err.data.message) || JSON.stringify(err);
+    if (isActive) {
+      diag.err(`Slot-${slot} load() rejected: ${msg}`);
+      hideLoading();
+    } else {
+      diag.log(`Preload Slot-${slot} fehlgeschlagen (nicht kritisch): ${msg}`);
+      elPreloadInd.classList.remove('visible');
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// Navigation mit Slot-Swap
+// ═══════════════════════════════════════════════════════════
+function navigateTo(index) {
+  if (isTransitioning || index < 0 || index >= videos.length) return;
+  isTransitioning = true;
+
+  const nextSlot = activeSlot === 'a' ? 'b' : 'a';
+  const prevSlot = activeSlot;
+
+  diag.log(`Navigate → Video ${index+1} (swap ${prevSlot}→${nextSlot})`);
+
+  // Ist das nächste Video bereits preloaded im nextSlot?
+  if (preloadIndex === index) {
+    diag.log(`⚡ Preload HIT für Video ${index+1} – sofortiger Swap`);
+    swapSlots(prevSlot, nextSlot, index);
+    isTransitioning = false;
+  } else {
+    // Kein Preload-Hit: normal laden
+    diag.log(`Preload MISS für Video ${index+1} – lade frisch`);
+    players[prevSlot].pause();
+    showLoading();
+    attachEvents(nextSlot);
+    loadIntoSlot(nextSlot, index, true).then(() => {
+      swapSlots(prevSlot, nextSlot, index);
+      isTransitioning = false;
+    });
+  }
+}
+
+function swapSlots(fromSlot, toSlot, index) {
+  // Visuell tauschen
+  document.getElementById('slot-' + fromSlot).classList.replace('active', 'preload');
+  document.getElementById('slot-' + toSlot).classList.replace('preload', 'active');
+
+  // Alten Player stoppen
+  players[fromSlot].pause();
+
+  // Neuen Player starten
+  const p = players[toSlot];
+  p.play();
+
+  activeSlot   = toSlot;
+  currentIndex = index;
+  updateUI(index);
+  hideLoading();
+
+  // Nächstes Video preloaden (Optimierung 2)
+  const nextIndex = index + 1;
+  if (nextIndex < videos.length) {
+    // Kurz warten damit der aktive Player zuerst Bandbreite bekommt
+    setTimeout(() => {
+      diag.log(`⚡ Starte Preload für Video ${nextIndex+1}`);
+      preloadIndex = -1;
+      loadIntoSlot(fromSlot, nextIndex, false);
+    }, 1500);
+  }
+}
+
+function attachEvents(slot) {
+  const p = players[slot];
+  if (!p) return;
+  p.on(bitmovin.player.PlayerEvent.Playing, () => {
+    hideLoading();
+    diag.log(`▶ Playing (Slot-${slot})`);
+  });
+  p.on(bitmovin.player.PlayerEvent.Error, (e) => {
+    diag.err(`PlayerError Slot-${slot}: ` + (e.message || JSON.stringify(e)));
+    hideLoading();
+  });
+  p.on(bitmovin.player.PlayerEvent.PlaybackFinished, () => {
+    if (currentIndex < videos.length - 1) {
+      setTimeout(() => navigateTo(currentIndex + 1), 400);
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// Navigation binden
+// ═══════════════════════════════════════════════════════════
+function bindNavigation() {
+  elBtnPrev.addEventListener('click', () => navigateTo(currentIndex - 1));
+  elBtnNext.addEventListener('click', () => navigateTo(currentIndex + 1));
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowUp'   || e.key === 'ArrowLeft')  navigateTo(currentIndex - 1);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') navigateTo(currentIndex + 1);
+    if (e.key === ' ') {
+      e.preventDefault();
+      const p = players[activeSlot];
+      if (p) p.isPlaying() ? p.pause() : p.play();
+    }
+  });
+  let ty = 0;
+  const wrap = document.getElementById('crop-wrapper');
+  wrap.addEventListener('touchstart', e => { ty = e.touches[0].clientY; }, { passive: true });
+  wrap.addEventListener('touchend',   e => {
+    const dy = ty - e.changedTouches[0].clientY;
+    if (Math.abs(dy) > 50) navigateTo(currentIndex + (dy > 0 ? 1 : -1));
+  }, { passive: true });
+}
+
+// ═══════════════════════════════════════════════════════════
+// UI
+// ═══════════════════════════════════════════════════════════
+function updateUI(index) {
+  const v = videos[index];
+  elTitle.textContent   = v.title;
+  elDesc.textContent    = v.description || '';
+  elCounter.textContent = `${index + 1} / ${videos.length}`;
+  document.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === index));
+  elBtnPrev.disabled = index === 0;
+  elBtnNext.disabled = index === videos.length - 1;
+  const hues = [180, 200, 160, 340];
+  elBgGlow.style.background = `radial-gradient(ellipse 60% 40% at 50% 50%, hsla(${hues[index % hues.length]},100%,55%,0.07) 0%, transparent 70%)`;
+}
+
+function buildDots() {
+  videos.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'dot' + (i === 0 ? ' active' : '');
+    d.addEventListener('click', () => navigateTo(i));
+    elDots.appendChild(d);
+  });
+}
+
+function showLoading()       { elLoading.classList.remove('hidden'); }
+function hideLoading()       { elLoading.classList.add('hidden'); }
+function setLoadingText(t)   { if (elLoadTxt) elLoadTxt.textContent = t; }
+function showError(msg)      { elError.textContent = '⚠ ' + msg; elError.style.display = 'block'; setTimeout(() => elError.style.display = 'none', 10000); }
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
