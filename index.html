@@ -122,7 +122,7 @@
 // ═══════════════════════════════════════════════════════════
 // KONFIGURATION – hier deine Werte eintragen
 // ═══════════════════════════════════════════════════════════
-const API_URL = 'https://script.google.com/macros/s/AKfycbxnsg75YjcYLArTVZPBpLD2wKLbuj_L50IE7cuO3PozENRU5HZmMAiTwbxWLPpOpVPRIw/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbyvZSTsnV8Nb5rQc3nmOZcFa4HACWxz6LFJiw3jHk7Mh6N-VsVE_yvRBR0JqherH6NnPw/exec';
 const USER_ID = 'lukas.dreier@chmedia.ch'; // z.B. 'lukas@chmedia.ch' oder leer
 
 // ═══════════════════════════════════════════════════════════
@@ -210,17 +210,37 @@ async function init() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// API fetch
+// API via JSONP (fetch() scheitert an CORS bei Apps Script)
 // ═══════════════════════════════════════════════════════════
-async function fetchAPI() {
-  const url = USER_ID
-    ? `${API_URL}?userId=${encodeURIComponent(USER_ID)}`
-    : API_URL;
-  diag.log('fetch → ' + url.substr(0,60) + '...');
-  const res  = await fetch(url);
-  const data = await res.json();
-  if (!data.ok) throw new Error(data.error || 'API error');
-  return data;
+function fetchAPI() {
+  return new Promise((resolve, reject) => {
+    const cbName = '__apsCb_' + Date.now();
+    const timeout = setTimeout(() => { cleanup(); reject(new Error('API Timeout (10s)')); }, 10000);
+
+    function cleanup() {
+      clearTimeout(timeout);
+      delete window[cbName];
+      const s = document.getElementById('jsonp-script');
+      if (s) s.remove();
+    }
+
+    window[cbName] = function(data) {
+      cleanup();
+      if (!data.ok) reject(new Error(data.error || 'API error'));
+      else resolve(data);
+    };
+
+    const params = new URLSearchParams({ callback: cbName });
+    if (USER_ID) params.set('userId', USER_ID);
+    const src = API_URL + '?' + params.toString();
+    diag.log('JSONP → ' + src.substr(0, 60) + '...');
+
+    const s = document.createElement('script');
+    s.id = 'jsonp-script';
+    s.src = src;
+    s.onerror = () => { cleanup(); reject(new Error('JSONP Script-Load fehlgeschlagen')); };
+    document.head.appendChild(s);
+  });
 }
 
 // ═══════════════════════════════════════════════════════════
