@@ -334,7 +334,7 @@ async function init() {
   const t0 = Date.now();
 
   const [_, apiData] = await Promise.all([
-    loadSDK('https://cdn.bitmovin.com/player/web/8/bitmovinplayer.js')
+    loadSDK('./bitmovinplayer.js')
       .then(() => diag.log(`⚡ SDK fertig (${Date.now()-t0}ms)`))
       .catch(e => { throw new Error('SDK: ' + e.message); }),
     fetchAPI()
