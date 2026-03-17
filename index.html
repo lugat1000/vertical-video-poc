@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <script src="./config.js"></script>
   <title>Vertical Video PoC</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;600;700&family=DM+Mono:wght@400;500&display=swap');
@@ -291,8 +292,8 @@
   window._hashParams = hash;
 })();
 
-const API_URL  = window._hashParams.api  || 'https://script.google.com/macros/s/AKfycbyvZSTsnV8Nb5rQc3nmOZcFa4HACWxz6LFJiw3jHk7Mh6N-VsVE_yvRBR0JqherH6NnPw/exec';
-const USER_ID  = window._hashParams.userId || 'lukas.dreier@chmedia.ch';
+const API_URL  = window._hashParams.api  || CONFIG.API_URL;
+const USER_ID  = window._hashParams.userId || CONFIG.USER_ID;
 const START_INDEX = parseInt(window._hashParams.start || '0') || 0;
 
 // ═══════════════════════════════════════════════════════════
