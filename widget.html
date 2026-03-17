@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Video Widget</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,600;0,700;1,300&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #f5f2ed;
+      --surface:  #fff;
+      --ink:      #1a1714;
+      --ink2:     #6b6560;
+      --accent:   #c8401a;
+      --accent2:  #e8b84b;
+      --border:   rgba(26,23,20,0.1);
+      --radius:   4px;
+    }
+
+    html, body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: 'DM Sans', sans-serif;
+      min-height: 100vh;
+    }
+
+    /* ── Page shell ─────────────────────────── */
+    .page {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+
+    /* ── Section header ─────────────────────── */
+    .section-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 28px;
+      border-top: 2px solid var(--ink);
+      padding-top: 14px;
+    }
+    .section-title {
+      font-family: 'Fraunces', serif;
+      font-size: clamp(22px, 3vw, 32px);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+    }
+    .section-title em {
+      font-style: italic;
+      font-weight: 300;
+      color: var(--accent);
+    }
+
+    /* ── Scroll track ───────────────────────── */
+    .track-wrap {
+      position: relative;
+    }
+    .track {
+      display: flex;
+      gap: 16px;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      padding-bottom: 4px;
+    }
+    .track::-webkit-scrollbar { display: none; }
+
+    /* ── Arrow nav ──────────────────────────── */
+    .arrow {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      border: 1.5px solid var(--ink);
+      background: var(--surface);
+      color: var(--ink);
+      font-size: 16px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      z-index: 10;
+      transition: all 0.2s;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+      opacity: 0;
+      pointer-events: none;
+    }
+    .track-wrap:hover .arrow { opacity: 1; pointer-events: auto; }
+    .arrow:hover { background: var(--ink); color: #fff; }
+    .arrow.prev { left: -20px; }
+    .arrow.next { right: -20px; }
+    .arrow:disabled { opacity: 0.2 !important; cursor: not-allowed; }
+
+    /* ── Card ───────────────────────────────── */
+    .card {
+      flex: 0 0 auto;
+      width: clamp(160px, 22vw, 220px);
+      scroll-snap-align: start;
+      cursor: pointer;
+      position: relative;
+    }
+
+    /* 9:16 portrait thumbnail */
+    .card-media {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 9 / 16;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #1a1714;
+      /* subtle lift on hover */
+      transition: transform 0.3s cubic-bezier(0.2,0,0,1),
+                  box-shadow 0.3s cubic-bezier(0.2,0,0,1);
+    }
+    .card:hover .card-media {
+      transform: translateY(-4px);
+      box-shadow: 0 16px 40px rgba(0,0,0,0.25);
+    }
+
+    /* Thumbnail */
+    .card-thumb {
+      position: absolute;
+      inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+      transition: opacity 0.4s ease;
+    }
+
+    /* Video element (hidden until hover/visible) */
+    .card-video {
+      position: absolute;
+      inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+      pointer-events: none;
+    }
+    .card.playing .card-video  { opacity: 1; }
+    .card.playing .card-thumb  { opacity: 0; }
+
+    /* Gradient overlay */
+    .card-gradient {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        to top,
+        rgba(10,8,6,0.9)  0%,
+        rgba(10,8,6,0.4)  40%,
+        transparent        70%
+      );
+      pointer-events: none;
+    }
+
+    /* Duration badge – top right */
+    .card-duration {
+      position: absolute;
+      top: 10px; right: 10px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      font-weight: 500;
+      color: #fff;
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(4px);
+      padding: 3px 8px;
+      border-radius: 20px;
+      letter-spacing: 0.02em;
+      z-index: 2;
+      transition: color 0.3s;
+      /* Will show countdown when playing */
+    }
+    .card.playing .card-duration { color: var(--accent2); }
+
+    /* Play icon – center (shown when not playing) */
+    .card-play-icon {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.18);
+      backdrop-filter: blur(6px);
+      display: flex; align-items: center; justify-content: center;
+      transition: opacity 0.3s, transform 0.3s;
+      z-index: 2;
+    }
+    .card-play-icon svg { width: 14px; height: 14px; fill: #fff; margin-left: 2px; }
+    .card.playing .card-play-icon { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+
+    /* Title below card */
+    .card-title {
+      margin-top: 10px;
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.4;
+      color: var(--ink);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    /* ── Loading skeleton ───────────────────── */
+    .skeleton .card-media {
+      background: linear-gradient(90deg, #e8e4df 25%, #f0ece7 50%, #e8e4df 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.4s infinite;
+    }
+    .skeleton .card-title {
+      height: 32px; border-radius: 4px;
+      background: linear-gradient(90deg, #e8e4df 25%, #f0ece7 50%, #e8e4df 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.4s infinite;
+    }
+    @keyframes shimmer { to { background-position: -200% 0; } }
+
+    /* ── Error state ────────────────────────── */
+    #error-msg {
+      display: none;
+      padding: 24px;
+      color: var(--accent);
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+    }
+
+    /* ── Fullscreen overlay (TikTok player) ─── */
+    #fullscreen-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: #000;
+    }
+    #fullscreen-overlay.open { display: block; }
+
+    #fullscreen-iframe {
+      width: 100%; height: 100%;
+      border: none;
+    }
+
+    #fullscreen-close {
+      position: fixed;
+      top: 16px; right: 16px;
+      z-index: 1001;
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(255,255,255,0.15);
+      backdrop-filter: blur(8px);
+      color: #fff;
+      font-size: 20px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s;
+    }
+    #fullscreen-close:hover { background: rgba(255,255,255,0.3); }
+  </style>
+</head>
+<body>
+
+<div class="page">
+
+  <div class="section-header">
+    <h2 class="section-title">Im <em>Video</em></h2>
+  </div>
+
+  <div class="track-wrap">
+    <button class="arrow prev" id="arrow-prev">&#8592;</button>
+    <div class="track" id="track">
+      <!-- Skeletons while loading -->
+      <div class="card skeleton"><div class="card-media"></div><div class="card-title"></div></div>
+      <div class="card skeleton"><div class="card-media"></div><div class="card-title"></div></div>
+      <div class="card skeleton"><div class="card-media"></div><div class="card-title"></div></div>
+      <div class="card skeleton"><div class="card-media"></div><div class="card-title"></div></div>
+      <div class="card skeleton"><div class="card-media"></div><div class="card-title"></div></div>
+    </div>
+    <button class="arrow next" id="arrow-next">&#8594;</button>
+  </div>
+
+  <div id="error-msg"></div>
+</div>
+
+<!-- Fullscreen overlay -->
+<div id="fullscreen-overlay">
+  <button id="fullscreen-close">&#x2715;</button>
+  <iframe id="fullscreen-iframe" allowfullscreen allow="autoplay"></iframe>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// KONFIGURATION
+// ═══════════════════════════════════════════
+const API_URL  = 'DEINE_APPS_SCRIPT_WEB_APP_URL';
+const USER_ID  = '';
+// URL des TikTok-Players (index.html im gleichen Repo)
+// Beim Klick auf ein Video wird dieser mit ?startIndex=N geöffnet
+const PLAYER_URL = './index.html';
+
+// ═══════════════════════════════════════════
+// State
+// ═══════════════════════════════════════════
+let videos       = [];
+let activeCard   = null;   // aktuell spielende Karte
+let countdownTimer = null;
+
+const elTrack   = document.getElementById('track');
+const elPrev    = document.getElementById('arrow-prev');
+const elNext    = document.getElementById('arrow-next');
+const elOverlay = document.getElementById('fullscreen-overlay');
+const elIframe  = document.getElementById('fullscreen-iframe');
+
+// ═══════════════════════════════════════════
+// Init
+// ═══════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  fetchAPI()
+    .then(data => {
+      videos = data.videos;
+      renderCards();
+      bindArrows();
+      bindFullscreenClose();
+    })
+    .catch(err => {
+      document.getElementById('error-msg').style.display = 'block';
+      document.getElementById('error-msg').textContent   = '⚠ ' + err.message;
+      elTrack.innerHTML = '';
+    });
+});
+
+// ═══════════════════════════════════════════
+// JSONP API fetch (same as TikTok player)
+// ═══════════════════════════════════════════
+function fetchAPI() {
+  return new Promise((resolve, reject) => {
+    const cbName  = '__wCb_' + Date.now();
+    const timeout = setTimeout(() => { cleanup(); reject(new Error('API Timeout')); }, 12000);
+
+    function cleanup() {
+      clearTimeout(timeout);
+      delete window[cbName];
+      const s = document.getElementById('_jsonp');
+      if (s) s.remove();
+    }
+
+    window[cbName] = data => {
+      cleanup();
+      if (!data.ok) reject(new Error(data.error || 'API error'));
+      else resolve(data);
+    };
+
+    const params = new URLSearchParams({ callback: cbName });
+    if (USER_ID) params.set('userId', USER_ID);
+
+    const s  = document.createElement('script');
+    s.id     = '_jsonp';
+    s.src    = API_URL + '?' + params.toString();
+    s.onerror = () => { cleanup(); reject(new Error('API nicht erreichbar')); };
+    document.head.appendChild(s);
+  });
+}
+
+// ═══════════════════════════════════════════
+// Render cards
+// ═══════════════════════════════════════════
+function renderCards() {
+  elTrack.innerHTML = '';
+
+  videos.forEach((v, i) => {
+    const card = document.createElement('div');
+    card.className   = 'card';
+    card.dataset.index = i;
+
+    const dur = fmtDuration(v.duration);
+
+    card.innerHTML = `
+      <div class="card-media">
+        <img class="card-thumb" src="${v.thumbnail}" alt="${v.title}" loading="lazy" />
+        <video class="card-video" muted playsinline loop preload="none"
+               data-src="${buildHlsUrl(v)}"></video>
+        <div class="card-gradient"></div>
+        <div class="card-duration" data-total="${v.duration}">${dur}</div>
+        <div class="card-play-icon">
+          <svg viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg>
+        </div>
+      </div>
+      <div class="card-title">${v.title}</div>
+    `;
+
+    // Desktop: hover → play
+    const media = card.querySelector('.card-media');
+    media.addEventListener('mouseenter', () => playCard(card));
+    media.addEventListener('mouseleave', () => stopCard(card));
+
+    // Click → fullscreen TikTok player
+    card.addEventListener('click', () => openFullscreen(i));
+
+    elTrack.appendChild(card);
+  });
+
+  // Mobile: IntersectionObserver → autoplay when ≥70% visible
+  setupIntersectionObserver();
+  updateArrows();
+}
+
+// ═══════════════════════════════════════════
+// Play / Stop a card
+// ═══════════════════════════════════════════
+function playCard(card) {
+  // Stop previous
+  if (activeCard && activeCard !== card) stopCard(activeCard);
+  activeCard = card;
+
+  const video    = card.querySelector('.card-video');
+  const durEl    = card.querySelector('.card-duration');
+  const totalSec = parseInt(durEl.dataset.total) || 0;
+
+  // Lazy-load video src
+  if (!video.src && video.dataset.src) {
+    video.src = video.dataset.src;
+  }
+
+  const playPromise = video.play();
+  if (playPromise) {
+    playPromise.then(() => {
+      card.classList.add('playing');
+      startCountdown(durEl, totalSec, video);
+    }).catch(() => {
+      // Autoplay blocked – show thumbnail, that's fine
+    });
+  }
+}
+
+function stopCard(card) {
+  if (!card) return;
+  const video = card.querySelector('.card-video');
+  video.pause();
+  video.currentTime = 0;
+  card.classList.remove('playing');
+
+  const durEl = card.querySelector('.card-duration');
+  durEl.textContent = fmtDuration(parseInt(durEl.dataset.total) || 0);
+  clearInterval(countdownTimer);
+
+  if (activeCard === card) activeCard = null;
+}
+
+// ═══════════════════════════════════════════
+// Countdown timer
+// ═══════════════════════════════════════════
+function startCountdown(el, totalSec, video) {
+  clearInterval(countdownTimer);
+  countdownTimer = setInterval(() => {
+    const remaining = Math.max(0, totalSec - Math.floor(video.currentTime));
+    el.textContent  = fmtDuration(remaining);
+    if (remaining <= 0) clearInterval(countdownTimer);
+  }, 250);
+}
+
+// ═══════════════════════════════════════════
+// IntersectionObserver for mobile autoplay
+// ═══════════════════════════════════════════
+function setupIntersectionObserver() {
+  if (!('IntersectionObserver' in window)) return;
+
+  // Only activate on touch devices
+  const isTouch = window.matchMedia('(hover: none)').matches;
+  if (!isTouch) return;
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      const card = entry.target.closest('.card');
+      if (!card) return;
+      if (entry.intersectionRatio >= 0.7) {
+        playCard(card);
+      } else {
+        if (activeCard === card) stopCard(card);
+      }
+    });
+  }, { threshold: [0, 0.7] });
+
+  document.querySelectorAll('.card-media').forEach(m => observer.observe(m));
+}
+
+// ═══════════════════════════════════════════
+// Arrow navigation
+// ═══════════════════════════════════════════
+function bindArrows() {
+  const cardWidth = () => {
+    const first = elTrack.querySelector('.card');
+    return first ? first.offsetWidth + 16 : 236; // width + gap
+  };
+
+  elPrev.addEventListener('click', () => {
+    elTrack.scrollBy({ left: -cardWidth() * 3, behavior: 'smooth' });
+  });
+  elNext.addEventListener('click', () => {
+    elTrack.scrollBy({ left:  cardWidth() * 3, behavior: 'smooth' });
+  });
+
+  elTrack.addEventListener('scroll', updateArrows);
+}
+
+function updateArrows() {
+  const atStart = elTrack.scrollLeft < 10;
+  const atEnd   = elTrack.scrollLeft + elTrack.clientWidth >= elTrack.scrollWidth - 10;
+  elPrev.disabled = atStart;
+  elNext.disabled = atEnd;
+}
+
+// ═══════════════════════════════════════════
+// Fullscreen: open TikTok player at index
+// ═══════════════════════════════════════════
+function openFullscreen(index) {
+  // Stop any playing card
+  if (activeCard) stopCard(activeCard);
+
+  // Load TikTok player in iframe with start index
+  // Pass API_URL + startIndex as hash params so index.html can pick up
+  const url = `${PLAYER_URL}#start=${index}&api=${encodeURIComponent(API_URL)}${USER_ID ? '&userId=' + encodeURIComponent(USER_ID) : ''}`;
+  elIframe.src = url;
+  elOverlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function bindFullscreenClose() {
+  document.getElementById('fullscreen-close').addEventListener('click', closeFullscreen);
+  elOverlay.addEventListener('click', e => {
+    if (e.target === elOverlay) closeFullscreen();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeFullscreen();
+  });
+}
+
+function closeFullscreen() {
+  elOverlay.classList.remove('open');
+  elIframe.src = '';
+  document.body.style.overflow = '';
+}
+
+// ═══════════════════════════════════════════
+// Helpers
+// ═══════════════════════════════════════════
+function buildHlsUrl(v) {
+  const base = `${v.serviceUrl}/p/${v.partnerId}/sp/${v.partnerId}00/playManifest/entryId/${v.id}`;
+  const ksQ  = v.ks ? `&ks=${encodeURIComponent(v.ks)}` : '';
+  return `${base}/format/applehttp/protocol/https/manifest.m3u8?deliveryCode=kalturaDelivery${ksQ}`;
+}
+
+function fmtDuration(sec) {
+  sec = Math.floor(sec || 0);
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+}
+</script>
+</body>
+</html>
