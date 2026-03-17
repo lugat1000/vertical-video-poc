@@ -281,8 +281,19 @@
 // ═══════════════════════════════════════════════════════════
 // KONFIGURATION – hier deine Werte eintragen
 // ═══════════════════════════════════════════════════════════
-const API_URL = 'https://script.google.com/macros/s/AKfycbyvZSTsnV8Nb5rQc3nmOZcFa4HACWxz6LFJiw3jHk7Mh6N-VsVE_yvRBR0JqherH6NnPw/exec';
-const USER_ID = ''; // z.B. 'lukas@chmedia.ch' oder leer
+
+(function() {
+  const hash = {};
+  location.hash.replace(/^#/, '').split('&').forEach(p => {
+    const [k, v] = p.split('=');
+    if (k) hash[k] = decodeURIComponent(v || '');
+  });
+  window._hashParams = hash;
+})();
+
+const API_URL  = window._hashParams.api  || 'https://script.google.com/macros/s/AKfycbyvZSTsnV8Nb5rQc3nmOZcFa4HACWxz6LFJiw3jHk7Mh6N-VsVE_yvRBR0JqherH6NnPw/exec';
+const USER_ID  = window._hashParams.userId || 'lukas.dreier@chmedia.ch';
+const START_INDEX = parseInt(window._hashParams.start || '0') || 0;
 
 // ═══════════════════════════════════════════════════════════
 // Diagnostics
@@ -306,7 +317,7 @@ const diag = {
 // State
 // ═══════════════════════════════════════════════════════════
 let videos        = [];
-let currentIndex  = 0;
+let currentIndex  = START_INDEX;
 let isTransitioning = false;
 
 // Zwei Player-Instanzen: active + preload
