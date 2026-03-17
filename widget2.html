@@ -13,92 +13,32 @@
       --bg:      #f5f2ed;
       --surface: #fff;
       --ink:     #1a1714;
-      --ink2:    #6b6560;
       --accent:  #c8401a;
       --accent2: #e8b84b;
-      --border:  rgba(26,23,20,0.1);
     }
 
-    html, body {
-      background: var(--bg);
-      color: var(--ink);
-      font-family: 'DM Sans', sans-serif;
-      min-height: 100vh;
-    }
+    html, body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-serif; min-height: 100vh; }
 
-    .page {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 48px 24px 80px;
-    }
+    .page { max-width: 1200px; margin: 0 auto; padding: 48px 24px 80px; }
 
-    /* ── Section header ── */
-    .section-header {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      margin-bottom: 28px;
-      border-top: 2px solid var(--ink);
-      padding-top: 14px;
-    }
-    .section-title {
-      font-family: 'Fraunces', serif;
-      font-size: clamp(22px, 3vw, 32px);
-      font-weight: 600;
-      letter-spacing: -0.02em;
-    }
-    .section-title em {
-      font-style: italic;
-      font-weight: 300;
-      color: var(--accent);
-    }
+    .section-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 28px; border-top: 2px solid var(--ink); padding-top: 14px; }
+    .section-title { font-family: 'Fraunces', serif; font-size: clamp(22px, 3vw, 32px); font-weight: 600; letter-spacing: -0.02em; }
+    .section-title em { font-style: italic; font-weight: 300; color: var(--accent); }
 
-    /* ── Track ── */
     .track-wrap { position: relative; }
-    .track {
-      display: flex;
-      gap: 16px;
-      overflow-x: auto;
-      scroll-snap-type: x mandatory;
-      -webkit-overflow-scrolling: touch;
-      scrollbar-width: none;
-      padding-bottom: 4px;
-    }
+    .track { display: flex; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding-bottom: 4px; }
     .track::-webkit-scrollbar { display: none; }
 
-    /* ── Arrows ── */
-    .arrow {
-      position: absolute;
-      top: 50%; transform: translateY(-50%);
-      width: 40px; height: 40px;
-      border-radius: 50%;
-      border: 1.5px solid var(--ink);
-      background: var(--surface);
-      color: var(--ink);
-      font-size: 16px;
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer;
-      z-index: 10;
-      transition: all 0.2s;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.12);
-      opacity: 0; pointer-events: none;
-    }
+    .arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border-radius: 50%; border: 1.5px solid var(--ink); background: var(--surface); color: var(--ink); font-size: 16px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10; transition: all 0.2s; box-shadow: 0 2px 12px rgba(0,0,0,0.12); opacity: 0; pointer-events: none; }
     .track-wrap:hover .arrow { opacity: 1; pointer-events: auto; }
     .arrow:hover { background: var(--ink); color: #fff; }
     .arrow.prev { left: -20px; }
     .arrow.next { right: -20px; }
     .arrow:disabled { opacity: 0.2 !important; cursor: not-allowed; }
 
-    /* ── Card ── */
-    .card {
-      flex: 0 0 auto;
-      width: clamp(160px, 22vw, 220px);
-      scroll-snap-align: start;
-      cursor: pointer;
-      position: relative;
-    }
+    .card { flex: 0 0 auto; width: clamp(160px, 22vw, 220px); scroll-snap-align: start; cursor: pointer; }
 
-    /* 9:16 portrait */
+    /* 9:16 portrait container */
     .card-media {
       position: relative;
       width: 100%;
@@ -106,124 +46,58 @@
       border-radius: 8px;
       overflow: hidden;
       background: #1a1714;
-      transition: transform 0.3s cubic-bezier(0.2,0,0,1),
-                  box-shadow 0.3s cubic-bezier(0.2,0,0,1);
+      transition: transform 0.3s cubic-bezier(0.2,0,0,1), box-shadow 0.3s cubic-bezier(0.2,0,0,1);
     }
-    .card:hover .card-media {
-      transform: translateY(-4px);
-      box-shadow: 0 16px 40px rgba(0,0,0,0.25);
-    }
+    .card:hover .card-media { transform: translateY(-4px); box-shadow: 0 16px 40px rgba(0,0,0,0.25); }
 
-    /* Static thumbnail */
-    .card-thumb {
-      position: absolute;
-      inset: 0; width: 100%; height: 100%;
-      object-fit: cover;
-      transition: opacity 0.4s ease;
-    }
+    /* Static thumbnail – object-fit:cover fills 9:16 */
+    .card-thumb { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: opacity 0.35s ease; }
 
-    /* Sprite layer */
+    /*
+      Sprite layer:
+      - background-size: auto 100%  → Höhe immer = Container, Breite proportional
+        Das ist das Äquivalent zu object-fit:cover in der Höhe.
+        Ein 16:9 Frame (400×225px) wird auf Container-Höhe hochskaliert,
+        dabei wird er breiter als der Container → Seiten werden gecroppt (cover).
+      - background-position wird per JS auf den jeweiligen Frame gesetzt
+    */
     .card-sprite {
       position: absolute;
-      inset: 0; width: 100%; height: 100%;
+      inset: 0;
+      width: 100%; height: 100%;
       background-repeat: no-repeat;
-      background-color: #000;
+      background-size: auto 100%;
+      background-position: center 0;
       opacity: 0;
-      transition: opacity 0.4s ease;
+      transition: opacity 0.35s ease;
       pointer-events: none;
     }
     .card.playing .card-sprite { opacity: 1; }
     .card.playing .card-thumb  { opacity: 0; }
 
-    /* Gradient */
-    .card-gradient {
-      position: absolute; inset: 0;
-      background: linear-gradient(
-        to top,
-        rgba(10,8,6,0.9) 0%,
-        rgba(10,8,6,0.4) 40%,
-        transparent 70%
-      );
-      pointer-events: none;
-    }
+    .card-gradient { position: absolute; inset: 0; background: linear-gradient(to top, rgba(10,8,6,0.9) 0%, rgba(10,8,6,0.4) 40%, transparent 70%); pointer-events: none; }
 
-    /* Duration badge */
-    .card-duration {
-      position: absolute;
-      top: 10px; right: 10px;
-      font-family: 'DM Mono', monospace;
-      font-size: 11px; font-weight: 500;
-      color: #fff;
-      background: rgba(0,0,0,0.55);
-      backdrop-filter: blur(4px);
-      padding: 3px 8px;
-      border-radius: 20px;
-      letter-spacing: 0.02em;
-      z-index: 2;
-      transition: color 0.3s;
-    }
+    .card-duration { position: absolute; top: 10px; right: 10px; font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500; color: #fff; background: rgba(0,0,0,0.55); backdrop-filter: blur(4px); padding: 3px 8px; border-radius: 20px; z-index: 2; transition: color 0.3s; }
     .card.playing .card-duration { color: var(--accent2); }
 
-    /* Play icon */
-    .card-play-icon {
-      position: absolute;
-      top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      width: 36px; height: 36px;
-      border-radius: 50%;
-      background: rgba(255,255,255,0.18);
-      backdrop-filter: blur(6px);
-      display: flex; align-items: center; justify-content: center;
-      transition: opacity 0.3s, transform 0.3s;
-      z-index: 2;
-    }
+    .card-play-icon { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.18); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; transition: opacity 0.3s, transform 0.3s; z-index: 2; }
     .card-play-icon svg { width: 14px; height: 14px; fill: #fff; margin-left: 2px; }
     .card.playing .card-play-icon { opacity: 0; transform: translate(-50%,-50%) scale(0.6); }
 
-    .card-title {
-      margin-top: 10px;
-      font-size: 13px; font-weight: 500;
-      line-height: 1.4; color: var(--ink);
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-    }
+    .card-title { margin-top: 10px; font-size: 13px; font-weight: 500; line-height: 1.4; color: var(--ink); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
-    /* ── Skeleton ── */
-    .skeleton .card-media {
-      background: linear-gradient(90deg, #e8e4df 25%, #f0ece7 50%, #e8e4df 75%);
-      background-size: 200% 100%;
-      animation: shimmer 1.4s infinite;
-    }
-    .skeleton .card-title {
-      height: 32px; border-radius: 4px;
-      background: linear-gradient(90deg, #e8e4df 25%, #f0ece7 50%, #e8e4df 75%);
-      background-size: 200% 100%;
-      animation: shimmer 1.4s infinite;
-    }
+    /* Skeleton */
+    .skeleton .card-media { background: linear-gradient(90deg, #e8e4df 25%, #f0ece7 50%, #e8e4df 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
+    .skeleton .card-title { height: 32px; border-radius: 4px; background: linear-gradient(90deg, #e8e4df 25%, #f0ece7 50%, #e8e4df 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
     @keyframes shimmer { to { background-position: -200% 0; } }
 
-    #error-msg {
-      display: none; padding: 24px;
-      color: var(--accent);
-      font-family: 'DM Mono', monospace; font-size: 13px;
-    }
+    #error-msg { display: none; padding: 24px; color: var(--accent); font-family: 'DM Mono', monospace; font-size: 13px; }
 
-    /* ── Fullscreen overlay ── */
-    #fullscreen-overlay {
-      display: none; position: fixed; inset: 0; z-index: 1000; background: #000;
-    }
+    /* Fullscreen */
+    #fullscreen-overlay { display: none; position: fixed; inset: 0; z-index: 1000; background: #000; }
     #fullscreen-overlay.open { display: block; }
     #fullscreen-iframe { width: 100%; height: 100%; border: none; }
-    #fullscreen-close {
-      position: fixed; top: 16px; right: 16px; z-index: 1001;
-      width: 40px; height: 40px; border-radius: 50%; border: none;
-      background: rgba(255,255,255,0.15); backdrop-filter: blur(8px);
-      color: #fff; font-size: 20px; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      transition: background 0.2s;
-    }
+    #fullscreen-close { position: fixed; top: 16px; right: 16px; z-index: 1001; width: 40px; height: 40px; border-radius: 50%; border: none; background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); color: #fff; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
     #fullscreen-close:hover { background: rgba(255,255,255,0.3); }
   </style>
 </head>
@@ -261,11 +135,10 @@ const API_URL    = CONFIG.API_URL;
 const USER_ID    = CONFIG.USER_ID;
 const PLAYER_URL = './index.html';
 
-// Sprite-Einstellungen – hier anpassen falls nötig
-const SPRITE_SLICES = 20;   // Anzahl Frames im Strip
-const SPRITE_FPS    = 4;    // Frames/Sekunde der Animation
-const SPRITE_START  = 5;    // Ab Sekunde X (überspringt Intros)
-const SPRITE_END    = 15;   // Bis Sekunde Y
+const SPRITE_SLICES = 20;  // Anzahl Frames
+const SPRITE_FPS    = 4;   // Frames/Sekunde
+const SPRITE_START  = 5;   // Ab Sekunde (Intro überspringen)
+const SPRITE_END    = 15;  // Bis Sekunde
 
 // ═══════════════════════════════════════════
 // State
@@ -305,23 +178,19 @@ function fetchAPI() {
   return new Promise((resolve, reject) => {
     const cbName  = '__wCb_' + Date.now();
     const timeout = setTimeout(() => { cleanup(); reject(new Error('API Timeout')); }, 12000);
-
     function cleanup() {
       clearTimeout(timeout);
       delete window[cbName];
       const s = document.getElementById('_jsonp');
       if (s) s.remove();
     }
-
     window[cbName] = data => {
       cleanup();
       if (!data.ok) reject(new Error(data.error || 'API error'));
       else resolve(data);
     };
-
     const params = new URLSearchParams({ callback: cbName });
     if (USER_ID) params.set('userId', USER_ID);
-
     const s   = document.createElement('script');
     s.id      = '_jsonp';
     s.src     = API_URL + '?' + params.toString();
@@ -331,13 +200,14 @@ function fetchAPI() {
 }
 
 // ═══════════════════════════════════════════
-// Kaltura Sprite URL bauen
+// Kaltura Sprite URL
+// Liefert horizontalen Strip mit SPRITE_SLICES Frames
 // ═══════════════════════════════════════════
 function buildSpriteUrl(v) {
   const ksSegment = v.ks ? `/ks/${encodeURIComponent(v.ks)}` : '';
   return [
     `${v.serviceUrl}/p/${v.partnerId}/thumbnail/entry_id/${v.id}`,
-    `/width/400`,
+    `/width/400`,               // Breite pro Frame in px
     `/vid_slices/${SPRITE_SLICES}`,
     `/start_sec/${SPRITE_START}`,
     `/end_sec/${SPRITE_END}`,
@@ -360,9 +230,7 @@ function renderCards() {
     card.innerHTML = `
       <div class="card-media">
         <img class="card-thumb" src="${v.thumbnail}" alt="${v.title}" loading="lazy" />
-        <div class="card-sprite"
-             data-sprite="${buildSpriteUrl(v)}"
-             data-slices="${SPRITE_SLICES}"></div>
+        <div class="card-sprite" data-sprite="${buildSpriteUrl(v)}"></div>
         <div class="card-gradient"></div>
         <div class="card-duration" data-total="${v.duration}">${fmtDuration(v.duration)}</div>
         <div class="card-play-icon">
@@ -376,16 +244,60 @@ function renderCards() {
     media.addEventListener('mouseenter', () => playCard(card));
     media.addEventListener('mouseleave', () => stopCard(card));
     card.addEventListener('click', () => openFullscreen(i));
-
     elTrack.appendChild(card);
   });
 
   setupIntersectionObserver();
   updateArrows();
+
+  // FIX 1: Sprites sofort im Hintergrund prefetchen
+  // 300ms Delay damit DOM-Rendering zuerst fertig ist
+  setTimeout(prefetchAllSprites, 300);
 }
 
 // ═══════════════════════════════════════════
-// Sprite Animation
+// FIX 1: Prefetch – lädt alle Sprite-Bilder
+// sofort nach dem Rendern in den Browser-Cache
+// ═══════════════════════════════════════════
+function prefetchAllSprites() {
+  document.querySelectorAll('.card-sprite').forEach(sprite => {
+    loadSprite(sprite);
+  });
+}
+
+function loadSprite(sprite) {
+  // Bereits geladen oder in progress
+  if (sprite._loaded || sprite._loading) return;
+  sprite._loading = true;
+
+  const img = new Image();
+  img.src = sprite.dataset.sprite;
+
+  img.onload = () => {
+    sprite.style.backgroundImage = `url('${img.src}')`;
+    // background-size: auto 100%
+    // → Höhe = Container (9:16), Breite skaliert proportional
+    // → 16:9 Frame wird so gross dass er den Container in der Höhe füllt
+    // → Seiten überstehen links/rechts → werden durch overflow:hidden gecroppt
+    // → Ergebnis: identisch zu object-fit:cover
+    sprite.style.backgroundSize = 'auto 100%';
+
+    // Geometrie merken für Frame-Positionierung
+    sprite._frameW  = img.naturalWidth / SPRITE_SLICES; // Breite 1 Frame (px)
+    sprite._imgH    = img.naturalHeight;
+    sprite._loaded  = true;  // FIX 2: erst NACH onload setzen
+    sprite._loading = false;
+  };
+
+  img.onerror = () => {
+    sprite._loading = false;
+    // Kein Crash – thumbnail bleibt sichtbar
+  };
+}
+
+// ═══════════════════════════════════════════
+// FIX 2+3: playCard – startet sofort wenn
+// Prefetch fertig, wartet sonst auf Load
 // ═══════════════════════════════════════════
 function playCard(card) {
   if (activeCard && activeCard !== card) stopCard(activeCard);
@@ -394,47 +306,60 @@ function playCard(card) {
   const sprite   = card.querySelector('.card-sprite');
   const durEl    = card.querySelector('.card-duration');
   const totalSec = parseInt(durEl.dataset.total) || 0;
-  const slices   = parseInt(sprite.dataset.slices) || SPRITE_SLICES;
 
-  if (!sprite._loaded) {
-    // Erstes Hover: Sprite-Bild lazy laden
-    sprite._loaded = true;
+  if (sprite._loaded) {
+    // Prefetch war fertig → sofortiger Start (FIX 1+2)
+    startSpriteAnim(card, sprite, durEl, totalSec);
+  } else {
+    // Noch nicht geladen → laden und auf onload warten
     const img = new Image();
     img.src = sprite.dataset.sprite;
     img.onload = () => {
       sprite.style.backgroundImage = `url('${img.src}')`;
-      // Strip ist slices×frameWidth breit → background-size streckt 1 Frame auf 100%
-      sprite.style.backgroundSize  = `${slices * 100}% auto`;
-      startSpriteAnim(card, sprite, durEl, totalSec, slices);
+      sprite.style.backgroundSize  = 'auto 100%';
+      sprite._frameW = img.naturalWidth / SPRITE_SLICES;
+      sprite._imgH   = img.naturalHeight;
+      sprite._loaded = true;
+      // Nur starten wenn Hover noch aktiv
+      if (activeCard === card) startSpriteAnim(card, sprite, durEl, totalSec);
     };
-    // Bei Fehler: thumbnail bleibt sichtbar, kein Crash
-  } else {
-    startSpriteAnim(card, sprite, durEl, totalSec, slices);
   }
 }
 
-function startSpriteAnim(card, sprite, durEl, totalSec, slices) {
+// ═══════════════════════════════════════════
+// FIX 3: Frame-Positionierung mit cover-Logik
+// ═══════════════════════════════════════════
+function startSpriteAnim(card, sprite, durEl, totalSec) {
   card.classList.add('playing');
+  clearInterval(countdownTimer);
 
-  const clipDuration = SPRITE_END - SPRITE_START; // Sekunden des Ausschnitts
+  const clipDuration = SPRITE_END - SPRITE_START;
   const startTime    = Date.now();
 
   function showFrame(f) {
-    // Positioniere Strip so dass Frame f sichtbar ist
-    const pct = (f / (slices - 1)) * 100;
-    sprite.style.backgroundPosition = `${pct}% 0`;
+    /*
+      background-size: auto 100%
+      → skalierter Frame hat Breite: frameW * (containerH / imgH)
+      → wir verschieben background-position-x so dass Frame f zentriert ist
+
+      backgroundPositionX = -(f * scaledFrameW) + (containerW - scaledFrameW) / 2
+      Das zentriert jeden Frame horizontal im Container (cover-Verhalten)
+    */
+    const containerH   = sprite.offsetHeight;
+    const containerW   = sprite.offsetWidth;
+    const scale        = containerH / (sprite._imgH || 225);
+    const scaledFrameW = (sprite._frameW || 400) * scale;
+    const offsetX      = -(f * scaledFrameW) + (containerW - scaledFrameW) / 2;
+    sprite.style.backgroundPosition = `${offsetX}px 0`;
   }
 
   showFrame(0);
-  clearInterval(countdownTimer);
 
   countdownTimer = setInterval(() => {
-    const elapsed = (Date.now() - startTime) / 1000;
-    // Frame aus aktuellem Loop-Position berechnen
-    const loopPos = elapsed % clipDuration;
-    const frame   = Math.floor((loopPos / clipDuration) * slices) % slices;
+    const elapsed   = (Date.now() - startTime) / 1000;
+    const loopPos   = elapsed % clipDuration;
+    const frame     = Math.floor((loopPos / clipDuration) * SPRITE_SLICES) % SPRITE_SLICES;
     showFrame(frame);
-    // Countdown über Gesamt-Duration
     const remaining = Math.max(0, totalSec - Math.floor(elapsed % (totalSec || 1)));
     durEl.textContent = fmtDuration(remaining);
   }, 1000 / SPRITE_FPS);
@@ -444,10 +369,8 @@ function stopCard(card) {
   if (!card) return;
   card.classList.remove('playing');
   clearInterval(countdownTimer);
-
   const durEl = card.querySelector('.card-duration');
-  durEl.textContent = fmtDuration(parseInt(durEl.dataset.total) || 0);
-
+  if (durEl) durEl.textContent = fmtDuration(parseInt(durEl.dataset.total) || 0);
   if (activeCard === card) activeCard = null;
 }
 
@@ -456,7 +379,7 @@ function stopCard(card) {
 // ═══════════════════════════════════════════
 function setupIntersectionObserver() {
   if (!('IntersectionObserver' in window)) return;
-  if (!window.matchMedia('(hover: none)').matches) return; // nur Touch
+  if (!window.matchMedia('(hover: none)').matches) return;
 
   const observer = new IntersectionObserver(entries => {
     entries.forEach(entry => {
