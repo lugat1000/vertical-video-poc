@@ -31,17 +31,44 @@
       width: 100%;
       aspect-ratio: 16 / 9;
       top: 50%; left: 50%;
-      transform: translate(-50%, -50%) scale(3.16);
       transform-origin: center center;
-      transition: opacity 0.3s ease;
+      /* Base scale for 16:9→9:16 crop, translateY controlled per class */
+      will-change: transform, opacity;
     }
-    /* Preload slot ist unsichtbar aber aktiv */
+    /* States for slide transition */
+    .player-slot.active {
+      transform: translate(-50%, -50%) scale(3.16);
+      opacity: 1;
+      z-index: 1;
+      pointer-events: auto;
+    }
     .player-slot.preload {
       opacity: 0;
       pointer-events: none;
       z-index: 0;
     }
-    .player-slot.active { opacity: 1; z-index: 1; }
+    /* Slide directions set via JS before transition */
+    .player-slot.slide-from-bottom {
+      transform: translate(-50%, calc(-50% + 100vh)) scale(3.16);
+      opacity: 0;
+    }
+    .player-slot.slide-from-top {
+      transform: translate(-50%, calc(-50% - 100vh)) scale(3.16);
+      opacity: 0;
+    }
+    .player-slot.slide-to-top {
+      transform: translate(-50%, calc(-50% - 100vh)) scale(3.16);
+      opacity: 0;
+    }
+    .player-slot.slide-to-bottom {
+      transform: translate(-50%, calc(-50% + 100vh)) scale(3.16);
+      opacity: 0;
+    }
+    /* Animate class triggers the CSS transition */
+    .player-slot.animating {
+      transition: transform 0.42s cubic-bezier(0.4, 0, 0.2, 1),
+                  opacity  0.42s cubic-bezier(0.4, 0, 0.2, 1);
+    }
 
     /* Bitmovin default UI verstecken */
     .player-slot .bmpui-ui-uicontainer { display: none !important; }
@@ -255,7 +282,7 @@
 // KONFIGURATION – hier deine Werte eintragen
 // ═══════════════════════════════════════════════════════════
 const API_URL = 'https://script.google.com/macros/s/AKfycbyvZSTsnV8Nb5rQc3nmOZcFa4HACWxz6LFJiw3jHk7Mh6N-VsVE_yvRBR0JqherH6NnPw/exec';
-const USER_ID = 'lukas.dreier@chmedia.ch'; // z.B. 'lukas@chmedia.ch' oder leer
+const USER_ID = ''; // z.B. 'lukas@chmedia.ch' oder leer
 
 // ═══════════════════════════════════════════════════════════
 // Diagnostics
@@ -334,7 +361,7 @@ async function init() {
   const t0 = Date.now();
 
   const [_, apiData] = await Promise.all([
-    loadSDK('./bitmovinplayer.js')
+    loadSDK('https://cdn.bitmovin.com/player/web/8/bitmovinplayer.js')
       .then(() => diag.log(`⚡ SDK fertig (${Date.now()-t0}ms)`))
       .catch(e => { throw new Error('SDK: ' + e.message); }),
     fetchAPI()
@@ -492,54 +519,81 @@ function navigateTo(index) {
 
   const nextSlot = activeSlot === 'a' ? 'b' : 'a';
   const prevSlot = activeSlot;
+  const dir      = index > currentIndex ? 'next' : 'prev';
 
-  diag.log(`Navigate → Video ${index+1} (swap ${prevSlot}→${nextSlot})`);
+  diag.log(`Navigate → Video ${index+1} (swap ${prevSlot}→${nextSlot}, dir=${dir})`);
 
-  // Ist das nächste Video bereits preloaded im nextSlot?
   if (preloadIndex === index) {
-    diag.log(`⚡ Preload HIT für Video ${index+1} – sofortiger Swap`);
-    swapSlots(prevSlot, nextSlot, index);
-    isTransitioning = false;
+    diag.log(`⚡ Preload HIT für Video ${index+1}`);
+    attachEvents(nextSlot);
+    swapSlots(prevSlot, nextSlot, index, dir);
+    // isTransitioning reset happens inside swapSlots after animation
   } else {
-    // Kein Preload-Hit: normal laden
     diag.log(`Preload MISS für Video ${index+1} – lade frisch`);
     players[prevSlot].pause();
     showLoading();
     attachEvents(nextSlot);
     loadIntoSlot(nextSlot, index, true).then(() => {
-      swapSlots(prevSlot, nextSlot, index);
-      isTransitioning = false;
+      swapSlots(prevSlot, nextSlot, index, dir);
     });
   }
 }
 
-function swapSlots(fromSlot, toSlot, index) {
-  // Visuell tauschen
-  document.getElementById('slot-' + fromSlot).classList.replace('active', 'preload');
-  document.getElementById('slot-' + toSlot).classList.replace('preload', 'active');
+function swapSlots(fromSlot, toSlot, index, direction) {
+  // direction: 'next' (slide up) or 'prev' (slide down)
+  const dir      = direction || (index >= currentIndex ? 'next' : 'prev');
+  const elFrom   = document.getElementById('slot-' + fromSlot);
+  const elTo     = document.getElementById('slot-' + toSlot);
 
-  // Alten Player stoppen
-  players[fromSlot].pause();
+  // Position incoming slot off-screen (no transition yet)
+  const inClass  = dir === 'next' ? 'slide-from-bottom' : 'slide-from-top';
+  const outClass = dir === 'next' ? 'slide-to-top'      : 'slide-to-bottom';
 
-  // Neuen Player starten
-  const p = players[toSlot];
-  p.play();
+  elTo.classList.remove('preload', 'slide-from-bottom', 'slide-from-top');
+  elTo.classList.add(inClass);
+  elTo.style.zIndex = '2';
+  elFrom.style.zIndex = '1';
 
+  // Force reflow so initial position is painted before animation starts
+  void elTo.offsetWidth;
+
+  // Start animation on both slots
+  elTo.classList.add('animating');
+  elFrom.classList.add('animating');
+
+  // Snap incoming to active position, push outgoing off-screen
+  elTo.classList.remove(inClass);
+  elTo.classList.add('active');
+  elFrom.classList.remove('active');
+  elFrom.classList.add(outClass);
+
+  // Start new video playing immediately
   activeSlot   = toSlot;
   currentIndex = index;
   updateUI(index);
   hideLoading();
+  players[toSlot].play();
 
-  // Nächstes Video preloaden (Optimierung 2)
-  const nextIndex = index + 1;
-  if (nextIndex < videos.length) {
-    // Kurz warten damit der aktive Player zuerst Bandbreite bekommt
-    setTimeout(() => {
-      diag.log(`⚡ Starte Preload für Video ${nextIndex+1}`);
-      preloadIndex = -1;
-      loadIntoSlot(fromSlot, nextIndex, false);
-    }, 1500);
-  }
+  // After transition: clean up outgoing slot
+  setTimeout(() => {
+    elFrom.classList.remove('animating', outClass, 'slide-to-top', 'slide-to-bottom');
+    elFrom.classList.add('preload');
+    elFrom.style.zIndex = '';
+    elTo.classList.remove('animating');
+    elTo.style.zIndex = '';
+    players[fromSlot].pause();
+    isTransitioning = false;
+
+    // Preload next video
+    const nextIndex = index + 1;
+    if (nextIndex < videos.length) {
+      setTimeout(() => {
+        diag.log(`⚡ Starte Preload für Video ${nextIndex+1}`);
+        preloadIndex = -1;
+        loadIntoSlot(fromSlot, nextIndex, false);
+      }, 800);
+    }
+  }, 450);
 }
 
 function attachEvents(slot) {
@@ -633,11 +687,17 @@ function togglePlayPause() {
 }
 
 function toggleMute() {
-  const p = players[activeSlot];
-  if (!p) return;
   isMuted = !isMuted;
-  // Alle Player synchron muten
-  Object.values(players).forEach(pl => { if (pl) pl.setVolume(isMuted ? 0 : 100); });
+  // Alle Player-Instanzen synchron (inkl. Preload-Slot)
+  Object.values(players).forEach(pl => {
+    if (!pl) return;
+    if (isMuted) {
+      pl.mute();
+    } else {
+      pl.unmute();
+      pl.setVolume(100);
+    }
+  });
   elIconMuted.style.display = isMuted ? '' : 'none';
   elIconSound.style.display = isMuted ? 'none' : '';
 }
