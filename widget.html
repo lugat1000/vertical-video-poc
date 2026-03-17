@@ -291,6 +291,7 @@
   <iframe id="fullscreen-iframe" allowfullscreen allow="autoplay"></iframe>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
 <script>
 // ═══════════════════════════════════════════
 // KONFIGURATION
@@ -418,20 +419,41 @@ function playCard(card) {
   const video    = card.querySelector('.card-video');
   const durEl    = card.querySelector('.card-duration');
   const totalSec = parseInt(durEl.dataset.total) || 0;
+  const src      = video.dataset.src;
+  if (!src) return;
 
-  // Lazy-load video src
-  if (!video.src && video.dataset.src) {
-    video.src = video.dataset.src;
-  }
-
-  const playPromise = video.play();
-  if (playPromise) {
-    playPromise.then(() => {
+  function doPlay() {
+    video.play().then(() => {
       card.classList.add('playing');
       startCountdown(durEl, totalSec, video);
     }).catch(() => {
-      // Autoplay blocked – show thumbnail, that's fine
+      // Autoplay blocked by browser policy – silent fail, thumbnail stays
     });
+  }
+
+  // If already attached (revisit after first hover), just play
+  if (video._hlsAttached) {
+    video.currentTime = 0;
+    doPlay();
+    return;
+  }
+
+  // Native HLS support (Safari)
+  if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    video.src = src;
+    video._hlsAttached = true;
+    video.addEventListener('loadedmetadata', doPlay, { once: true });
+    return;
+  }
+
+  // Chrome / Firefox: use hls.js
+  if (window.Hls && Hls.isSupported()) {
+    const hls = new Hls({ startLevel: 2, maxBufferLength: 8 });
+    hls.loadSource(src);
+    hls.attachMedia(video);
+    video._hls = hls;
+    video._hlsAttached = true;
+    hls.on(Hls.Events.MANIFEST_PARSED, doPlay);
   }
 }
 
@@ -447,6 +469,7 @@ function stopCard(card) {
   clearInterval(countdownTimer);
 
   if (activeCard === card) activeCard = null;
+  // Note: we keep hls instance attached so re-hover is instant (no reload)
 }
 
 // ═══════════════════════════════════════════
